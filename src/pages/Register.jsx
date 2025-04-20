@@ -17,10 +17,15 @@ export default function Register() {
       const user = userCredential.user;
 
       // Store user role in Firestore
-      await setDoc(doc(db, "users", user.uid), {
-        email: user.email,
-        role: role,
-      });
+      try {
+        await setDoc(doc(db, "users", user.uid), {
+          email: user.email,
+          role: role,
+        });
+      } catch (firestoreError) {
+        console.error("Firestore Error:", firestoreError.message);
+      }
+      
 
       // Redirect based on role
       if (role === "customer") {

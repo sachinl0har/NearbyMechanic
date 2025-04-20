@@ -1,11 +1,39 @@
 import { useEffect, useState } from "react";
-import { db } from "../firebase";
-import { collection, doc, updateDoc, onSnapshot } from "firebase/firestore";
+import { useNavigate } from "react-router-dom";
+import { auth, db } from "../firebase";
+import { collection, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
 import GoogleMapComponent from "../components/GoogleMapComponent";
 
 export default function MechanicDashboard() {
   const [location, setLocation] = useState({ lat: 0, lng: 0 });
   const [customerRequests, setCustomerRequests] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
+
+  // Role check on mount
+  useEffect(() => {
+    const checkUserRole = async () => {
+      const user = auth.currentUser;
+      if (!user) {
+        navigate("/login");
+        return;
+      }
+
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        if (userData.role !== "mechanic") {
+          navigate("/unauthorized"); // Redirect if not mechanic
+        } else {
+          setIsLoading(false); // Show dashboard only if mechanic
+        }
+      } else {
+        navigate("/unauthorized");
+      }
+    };
+
+    checkUserRole();
+  }, [navigate]);
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -14,7 +42,7 @@ export default function MechanicDashboard() {
     );
   }, []);
 
-  // Fetch customer requests in real time
+  // Fetch customer requests
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "customerRequests"), (snapshot) => {
       const requests = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -24,13 +52,11 @@ export default function MechanicDashboard() {
     return () => unsubscribe();
   }, []);
 
-  // Redirect to Google Maps for route
   const openGoogleMaps = (requestLocation) => {
     const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${location.lat},${location.lng}&destination=${requestLocation.lat},${requestLocation.lng}&travelmode=driving`;
     window.open(googleMapsUrl, "_blank");
   };
 
-  // Accept/Reject request
   const handleResponse = async (requestId, status, requestLocation) => {
     const requestRef = doc(db, "customerRequests", requestId);
     await updateDoc(requestRef, { status });
@@ -40,11 +66,12 @@ export default function MechanicDashboard() {
     }
   };
 
+  if (isLoading) return <div className="text-center mt-10">Loading...</div>;
+
   return (
     <div className="w-full h-screen flex flex-col items-center">
       <h1 className="text-2xl mt-4">Mechanic Dashboard</h1>
 
-      {/* Google Map Component */}
       <GoogleMapComponent latitude={location.lat} longitude={location.lng} />
 
       <h2 className="mt-6 text-xl">Customer Requests:</h2>
@@ -69,7 +96,6 @@ export default function MechanicDashboard() {
                 {request.status}
               </strong>
 
-              {/* Show "Get Route" button always */}
               <button
                 className="bg-blue-500 text-white px-3 py-1 rounded mt-2 mr-2"
                 onClick={() => openGoogleMaps(request.location)}
@@ -77,7 +103,6 @@ export default function MechanicDashboard() {
                 Get Route
               </button>
 
-              {/* Show Accept/Reject buttons only if status is Pending */}
               {request.status === "Pending" && (
                 <div className="mt-2">
                   <button

@@ -1,21 +1,47 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { auth } from "./firebase";
+import { Link, useNavigate } from "react-router-dom";
+import { auth, db } from "./firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate(); // 👈 Added
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+
+      if (currentUser) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+
+          console.log(userDoc.data());
+
+          if (userDoc.exists()) {
+
+            console.log(userDoc.data().role);
+
+            setUserRole(userDoc.data().role);
+          }
+        } catch (error) {
+          console.error("Error fetching user role:", error);
+        }
+      } else {
+        setUserRole(null);
+      }
     });
+
     return () => unsubscribe();
   }, []);
 
   const handleLogout = async () => {
     await signOut(auth);
+    setUser(null);
+    setUserRole(null);
+    navigate("/login"); // 👈 Redirect after logout
   };
 
   return (
@@ -49,18 +75,24 @@ export default function Navbar() {
           {user ? (
             <>
               <li className="font-semibold text-green-400 block md:inline p-2">
-                👤 {user.displayName || "User"}
+                👤 {user.email || "User"}
               </li>
-              <li>
-                <Link to="/dashboard" className="hover:text-yellow-400 block md:inline p-2">
-                  Dashboard
-                </Link>
-              </li>
-              <li>
-                <Link to="/mechanic" className="hover:text-yellow-400 block md:inline p-2">
-                  Mechanic
-                </Link>
-              </li>
+
+              {userRole === "customer" && (
+                <li>
+                  <Link to="/dashboard" className="hover:text-yellow-400 block md:inline p-2">
+                    Dashboard
+                  </Link>
+                </li>
+              )}
+              {userRole === "mechanic" && (
+                <li>
+                  <Link to="/mechanic" className="hover:text-yellow-400 block md:inline p-2">
+                    Mechanic
+                  </Link>
+                </li>
+              )}
+
               <li>
                 <button
                   className="bg-red-500 hover:bg-red-700 px-3 py-1 rounded block md:inline"
